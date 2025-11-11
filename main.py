@@ -5,8 +5,10 @@ import requests
 import logging
 from collections import defaultdict
 from datetime import datetime
+import pytz
 
 # Load environment variables from .env file
+EST = pytz.timezone("America/Toronto")
 load_dotenv(find_dotenv())
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -49,11 +51,16 @@ def get_attendance_status(hex_color):
     return "Unknown"
 
 def format_date(date_str):
-    """Format ISO date string to readable format."""
+    """Format ISO date string to readable format in EST timezone."""
     try:
         if date_str:
             dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            return dt.strftime('%Y-%m-%d %H:%M')
+            # If datetime is naive, assume UTC
+            if dt.tzinfo is None:
+                dt = pytz.UTC.localize(dt)
+            # Convert to EST
+            dt_est = dt.astimezone(EST)
+            return dt_est.strftime('%Y-%m-%d %H:%M')
     except:
         pass
     return date_str or "N/A"
@@ -114,7 +121,12 @@ def format_discord_message(person, events):
                     try:
                         month, day = month_day.split('-')
                         hour, minute = time_part.split(':') if ':' in time_part else (time_part[:2], time_part[2:])
-                        timestamp = datetime(int(year), int(month), int(day), int(hour), int(minute)).isoformat()
+                        # Create naive datetime, assume UTC (since it had 'Z')
+                        dt = datetime(int(year), int(month), int(day), int(hour), int(minute))
+                        dt_utc = pytz.UTC.localize(dt)
+                        # Convert to EST
+                        dt_est = dt_utc.astimezone(EST)
+                        timestamp = dt_est.isoformat()
                     except:
                         pass
         except:
@@ -139,7 +151,7 @@ def format_discord_message(person, events):
         "description": description,
         "color": color,
         "fields": fields,
-        "timestamp": timestamp or datetime.utcnow().isoformat(),
+        "timestamp": timestamp or datetime.now(EST).isoformat(),
         "footer": {
             "text": "Attendance System"
         }
