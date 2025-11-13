@@ -4,15 +4,34 @@ from dotenv import load_dotenv, find_dotenv
 import requests
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
+import threading
 
 # Load environment variables from .env file
 EST = pytz.timezone("America/Toronto")
 load_dotenv(find_dotenv())
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+# Batching configuration - messages within this time window (in seconds) will be batched together
+BATCH_WINDOW_SECONDS = int(os.getenv("DEV_BATCH_WINDOW_SECONDS")) if os.getenv("ENV") == "development" else 20 
+
 app = Flask(__name__)
+
+# Thread-safe storage for pending events
+pending_events_lock = threading.Lock()
+pending_events = []  # List of tuples: (event, timestamp, person)
+
+def batch_processor_thread():
+    """Background thread that periodically processes and sends batched events."""
+    import time
+    while True:
+        try:
+            time.sleep(BATCH_WINDOW_SECONDS)  # Check every 30 seconds
+            process_and_send_batched_events()
+        except Exception as e:
+            print(f"Error in batch processor thread: {e}")
 
 
 def hex_to_decimal(hex_color):
@@ -202,33 +221,38 @@ def send_msg(payload):
     """Send message to Discord webhook. Payload can be embed format or plain content."""
     res = requests.post(WEBHOOK_URL, json=payload)
     return res.text, res.status_code
-    
-@app.route('/', methods=['GET'])
-def health_check():
-    return "Hello", 200
 
-@app.route('/event', methods=['POST'])
-def handle_event():
-    print(request.json)
-    data = request.json
-    print(data)
+def process_and_send_batched_events():
+    """Process events that are older than the batching window and send them."""
+    global pending_events
     
-    if not data:
-        return "No data provided", 400
+    with pending_events_lock:
+        now = datetime.now(EST)
+        cutoff_time = now - timedelta(seconds=BATCH_WINDOW_SECONDS)
+        
+        # Separate events into those ready to send and those still pending
+        events_to_process = []
+        still_pending = []
+        
+        for event, timestamp, person in pending_events:
+            if timestamp <= cutoff_time:
+                events_to_process.append((event, person))
+            else:
+                still_pending.append((event, timestamp, person))
+        
+        # Update pending events to only include those still within the window
+        pending_events = still_pending
     
-    # Check if we're in quiet period (Saturday 12:00am to Sunday 7:30pm EST)
-    if is_quiet_period():
-        now_est = datetime.now(EST)
-        print(f"Quiet period active - skipping notifications. Current EST time: {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        return "Success (quiet period - notifications disabled)", 204
+    # If no events ready to send, return early
+    if not events_to_process:
+        return
     
     # Group events by person
     events_by_person = defaultdict(list)
-    for event in data:
-        person = event.get('person', 'Unknown')
+    for event, person in events_to_process:
         events_by_person[person].append(event)
     
-    # For each person, keep only the latest change per cell for bg and newValue separately
+    # Process events for each person (filter by cell, merge bg/newValue, etc.)
     filtered_events_by_person = {}
     for person, events in events_by_person.items():
         # Group events by cell
@@ -309,17 +333,57 @@ def handle_event():
         embed_payload = format_discord_message(person, events)
         if embed_payload:
             t, c = send_msg(embed_payload)
-            print(f"Sent message for {person}: {c}")
+            print(f"Sent batched message for {person}: {c}")
+    
+@app.route('/', methods=['GET'])
+def health_check():
+    return "Hello", 200
+
+@app.route('/event', methods=['POST'])
+def handle_event():
+    print(request.json)
+    data = request.json
+    print(data)
+    
+    if not data:
+        return "No data provided", 400
+    
+    # Check if we're in quiet period (Saturday 12:00am to Sunday 7:30pm EST)
+    if is_quiet_period():
+        now_est = datetime.now(EST)
+        print(f"Quiet period active - skipping notifications. Current EST time: {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        return "Success (quiet period - notifications disabled)", 204
+    
+    # Add new events to the pending queue with current timestamp
+    now = datetime.now(EST)
+    with pending_events_lock:
+        for event in data:
+            person = event.get('person', 'Unknown')
+            pending_events.append((event, now, person))
+        print(f"Added {len(data)} event(s) to pending queue. Total pending: {len(pending_events)}")
+    
+    # Process and send any events that are ready (older than BATCH_WINDOW_SECONDS)
+    process_and_send_batched_events()
     
     return "Success", 204
 
 
 if __name__ == '__main__':
+    # Start background thread for processing batched events
+    batch_thread = threading.Thread(target=batch_processor_thread, daemon=True)
+    batch_thread.start()
+    print(f"Started batch processor thread (window: {BATCH_WINDOW_SECONDS} seconds)")
+    
     # loop = asyncio.new_event_loop()
     # loop.create_task(run_bot())
     # asyncio.set_event_loop(loop)
     app.run(host="0.0.0.0")
 else:
+    # Start background thread for processing batched events (for gunicorn)
+    batch_thread = threading.Thread(target=batch_processor_thread, daemon=True)
+    batch_thread.start()
+    print(f"Started batch processor thread (window: {BATCH_WINDOW_SECONDS} seconds)")
+    
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
