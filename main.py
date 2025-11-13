@@ -50,6 +50,27 @@ def get_attendance_status(hex_color):
     
     return "Unknown"
 
+def parse_date_changed(date_changed_str):
+    """Parse date_changed format "09-27T09:23Z" to datetime object for comparison."""
+    try:
+        if not date_changed_str or 'T' not in date_changed_str:
+            return None
+        
+        parts = date_changed_str.split('T')
+        if len(parts) == 2:
+            year = datetime.now(EST).year
+            month_day = parts[0]
+            time_part = parts[1].replace('Z', '')
+            month, day = month_day.split('-')
+            hour, minute = time_part.split(':') if ':' in time_part else (time_part[:2], time_part[2:])
+            # Create naive datetime, assume UTC (since it had 'Z')
+            dt = datetime(int(year), int(month), int(day), int(hour), int(minute))
+            dt_utc = pytz.UTC.localize(dt)
+            return dt_utc
+    except:
+        pass
+    return None
+
 def format_date(date_str):
     """Format ISO date string to readable format in EST timezone."""
     try:
@@ -207,8 +228,84 @@ def handle_event():
         person = event.get('person', 'Unknown')
         events_by_person[person].append(event)
     
-    # Send one formatted message per person
+    # For each person, keep only the latest change per cell for bg and newValue separately
+    filtered_events_by_person = {}
     for person, events in events_by_person.items():
+        # Group events by cell
+        events_by_cell = defaultdict(list)
+        for event in events:
+            cell = event.get('cell', 'N/A')
+            events_by_cell[cell].append(event)
+        
+        # For each cell, track latest bg change and latest newValue change separately
+        latest_events = []
+        for cell, cell_events in events_by_cell.items():
+            # Track latest event that changed bg
+            latest_bg_event = None
+            latest_bg_datetime = None
+            
+            # Track latest event that changed newValue
+            latest_newvalue_event = None
+            latest_newvalue_datetime = None
+            
+            for event in cell_events:
+                date_changed = event.get('date_changed', '')
+                event_datetime = parse_date_changed(date_changed)
+                
+                # Check if this event has a bg change
+                if event.get('bg'):
+                    if event_datetime is None:
+                        if latest_bg_event is None:
+                            latest_bg_event = event
+                    else:
+                        if latest_bg_datetime is None or event_datetime > latest_bg_datetime:
+                            latest_bg_datetime = event_datetime
+                            latest_bg_event = event
+                
+                # Check if this event has a newValue change
+                if 'newValue' in event and event.get('newValue') is not None:
+                    if event_datetime is None:
+                        if latest_newvalue_event is None:
+                            latest_newvalue_event = event
+                    else:
+                        if latest_newvalue_datetime is None or event_datetime > latest_newvalue_datetime:
+                            latest_newvalue_datetime = event_datetime
+                            latest_newvalue_event = event
+            
+            # Merge the latest bg and newValue changes into a single event
+            if latest_bg_event or latest_newvalue_event:
+                # Start with the event that has the later timestamp, or use bg event as base if both exist
+                if latest_bg_event and latest_newvalue_event:
+                    # Use the later timestamp to determine base event
+                    if latest_bg_datetime and latest_newvalue_datetime:
+                        base_event = latest_bg_event if latest_bg_datetime >= latest_newvalue_datetime else latest_newvalue_event
+                    else:
+                        base_event = latest_bg_event
+                    
+                    # Create merged event with latest bg and latest newValue
+                    merged_event = base_event.copy()
+                    if latest_bg_event:
+                        merged_event['bg'] = latest_bg_event.get('bg')
+                    if latest_newvalue_event:
+                        merged_event['newValue'] = latest_newvalue_event.get('newValue')
+                    # Use the later date_changed timestamp
+                    if latest_bg_datetime and latest_newvalue_datetime:
+                        merged_event['date_changed'] = latest_bg_event.get('date_changed') if latest_bg_datetime >= latest_newvalue_datetime else latest_newvalue_event.get('date_changed')
+                    elif latest_bg_datetime:
+                        merged_event['date_changed'] = latest_bg_event.get('date_changed')
+                    elif latest_newvalue_datetime:
+                        merged_event['date_changed'] = latest_newvalue_event.get('date_changed')
+                    
+                    latest_events.append(merged_event)
+                elif latest_bg_event:
+                    latest_events.append(latest_bg_event)
+                elif latest_newvalue_event:
+                    latest_events.append(latest_newvalue_event)
+        
+        filtered_events_by_person[person] = latest_events
+    
+    # Send one formatted message per person
+    for person, events in filtered_events_by_person.items():
         embed_payload = format_discord_message(person, events)
         if embed_payload:
             t, c = send_msg(embed_payload)
