@@ -1,0 +1,869 @@
+{
+	"info": {
+		"_postman_id": "batching-test-suite-001",
+		"name": "Batching Functionality Test Suite",
+		"description": "Comprehensive test suite for testing event batching functionality",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response body is 'Hello'\", function () {",
+							"    pm.response.to.have.body(\"Hello\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/",
+					"host": ["{{base_url}}"],
+					"path": [""]
+				}
+			}
+		},
+		{
+			"name": "Batching Tests",
+			"item": [
+				{
+					"name": "1. Single Event - Should Queue",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Note: Event should be queued and not sent immediately",
+									"// Wait for batch window (5 seconds) to verify batching"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Alice Smith\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "2. Multiple Events Same Person - Should Batch",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// All events for same person should be batched together",
+									"// Wait for batch window to verify single message sent"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Bob Johnson\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG12\",\n        \"newValue\": \"Present\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:24Z\",\n        \"person\": \"Bob Johnson\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG13\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-03T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Bob Johnson\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "3. Multiple Events Different People - Should Batch Separately",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Events for different people should result in separate messages",
+									"// Wait for batch window to verify multiple messages sent"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Charlie Brown\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG12\",\n        \"newValue\": \"Present\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:24Z\",\n        \"person\": \"Diana Prince\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG13\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-03T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Eve Wilson\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "4. Same Cell Multiple Changes - Should Merge",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Multiple changes to same cell should merge",
+									"// Latest bg and newValue should be used"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:20Z\",\n        \"person\": \"Frank Miller\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"Present\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Frank Miller\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"Absent\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:30Z\",\n        \"person\": \"Frank Miller\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "5. Different Cells Same Person - Should Not Merge",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Different cells should not merge, all should appear in message"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Grace Lee\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG12\",\n        \"newValue\": \"Present\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:24Z\",\n        \"person\": \"Grace Lee\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG13\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-03T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Grace Lee\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "6. Background Color Changes - Latest Should Win",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Latest bg color change should be used in merged event"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:20Z\",\n        \"person\": \"Henry Davis\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Henry Davis\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:30Z\",\n        \"person\": \"Henry Davis\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "7. NewValue Changes - Latest Should Win",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Latest newValue change should be used in merged event"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"Old Value\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:20Z\",\n        \"person\": \"Iris White\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"Updated Value\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Iris White\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"Final Value\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:30Z\",\n        \"person\": \"Iris White\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "8. Mixed bg and newValue Changes - Both Latest Should Merge",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Latest bg and latest newValue should both be in merged event"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"Initial\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:20Z\",\n        \"person\": \"Jack Black\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": null,\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Jack Black\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"Final\",\n        \"bg\": null,\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:30Z\",\n        \"person\": \"Jack Black\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "9. Rapid Sequential Events - Should Batch",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Store timestamp for first request",
+									"pm.environment.set(\"batch_start_time\", new Date().getTime());"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Rapid events should all be batched together",
+									"// Note: Run this test multiple times quickly to test batching"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Kelly Green\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "10. Empty Payload - Should Return 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error message indicates no data\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"No data provided\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "11. Empty Array - Should Handle Gracefully",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"// Empty array should be accepted but no events queued"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "12. Missing Person Field - Should Use Unknown",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Event without person field should use 'Unknown' as person"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "13. Present Status (Green) - Should Identify Correctly",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"// Green background should be identified as Present"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Liam Present\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "14. Absent Status (Red) - Should Identify Correctly",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"// Red background should be identified as Absent"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Mia Absent\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "15. Mixed Present and Absent - Should Count Both",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"// Message should show count of both Present and Absent"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Noah Mixed\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG12\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:24Z\",\n        \"person\": \"Noah Mixed\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG13\",\n        \"newValue\": \"\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-03T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Noah Mixed\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "16. Large Batch - Multiple People Multiple Events",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Success\");",
+									"});",
+									"",
+									"// Large batch should process correctly",
+									"// Each person should get separate message"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Olivia Large\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG12\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:24Z\",\n        \"person\": \"Olivia Large\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG13\",\n        \"newValue\": \"\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-03T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:25Z\",\n        \"person\": \"Olivia Large\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG14\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-04T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:26Z\",\n        \"person\": \"Paul Large\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG15\",\n        \"newValue\": \"\",\n        \"bg\": \"#d9ead3\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-05T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:27Z\",\n        \"person\": \"Paul Large\"\n    },\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG16\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-06T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:28Z\",\n        \"person\": \"Quinn Large\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Batch Window Timing Tests",
+			"item": [
+				{
+					"name": "17. Wait for Batch Window - Verify Timing",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Record start time",
+									"pm.environment.set(\"test_start_time\", new Date().getTime());"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"// Note: Batch window is 5 seconds",
+									"// Event should be queued and sent after 5 seconds",
+									"// To verify: wait 6+ seconds and check Discord webhook"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Timing Test\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				},
+				{
+					"name": "18. Sequential Requests Within Window - Should Batch",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"// Run this test multiple times quickly (within 5 seconds)",
+									"// All requests should be batched together"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"sheetName\": \"Fall Attendance\",\n        \"cell\": \"AG11\",\n        \"newValue\": \"\",\n        \"bg\": \"#f4cccc\",\n        \"type_change\": \"EDIT\",\n        \"type\": \"6:00pm-7:30pm \\nWarrior Zone\",\n        \"practice_date\": \"2024-10-02T04:00:00.000Z\",\n        \"date_changed\": \"09-27T09:23Z\",\n        \"person\": \"Sequential Batch\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/event",
+							"host": ["{{base_url}}"],
+							"path": ["event"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		}
+	]
+}
