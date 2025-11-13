@@ -116,11 +116,23 @@ def format_discord_message(person, events):
     # Format fields for each event
     fields = []
     for event in events:
-        practice_date = format_date(event.get('practice_date', ''))
+        # Get practice_date in a human-readable format (e.g., "Wed, Oct 2 2024, 12:00 AM")
+        raw_practice_date = event.get('practice_date', '')
+        try:
+            if raw_practice_date:
+                dt = datetime.fromisoformat(raw_practice_date.replace('Z', '+00:00'))
+                # Convert to EST
+                if dt.tzinfo is None:
+                    dt = pytz.UTC.localize(dt)
+                dt_est = dt.astimezone(EST)
+                practice_date = dt_est.strftime('%a %b %-d')
+            else:
+                practice_date = "N/A"
+        except Exception:
+            practice_date = raw_practice_date or "N/A"
         event_type = event.get('type', 'N/A').replace('\n', ' - ')
         change_type = event.get('type_change', 'N/A')
         cell = event.get('cell', 'N/A')
-        sheet_name = event.get('sheetName', 'N/A')
         bg_color = event.get('bg', '')
         attendance_status = get_attendance_status(bg_color)
         
@@ -130,12 +142,11 @@ def format_discord_message(person, events):
         field_value = f"**Status:** {status_emoji} {attendance_status}\n"
         field_value += f"**Date:** {practice_date}\n"
         field_value += f"**Type:** {event_type}\n"
-        field_value += f"**Change:** {change_type}\n"
-        field_value += f"**Cell:** {cell}\n"
-        field_value += f"**Sheet:** {sheet_name}"
+        # field_value += f"**Change:** {change_type}\n"
+        field_value += f"**Cell:** {cell}"
         
         if event.get('newValue'):
-            field_value += f"\n**New Value:** {event.get('newValue')}"
+            field_value += f"\n**Message:** {event.get('newValue')}"
         
         fields.append({
             "name": f"Event {len(fields) + 1}",
@@ -217,19 +228,6 @@ def is_quiet_period():
     
     return False
 
-def is_valid_event(event):
-    """Check if event has required fields (type and practice_date)."""
-    if not event:
-        return False
-    type_field = event.get('type')
-    practice_date = event.get('practice_date')
-    
-    # Both type and practice_date must be present and not empty
-    if not type_field or not practice_date:
-        return False
-    
-    return True
-
 def send_msg(payload):
     """Send message to Discord webhook. Payload can be embed format or plain content."""
     res = requests.post(WEBHOOK_URL, json=payload)
@@ -260,20 +258,9 @@ def process_and_send_batched_events():
     if not events_to_process:
         return
     
-    # Filter out invalid events (missing type or practice_date)
-    valid_events_to_process = []
-    for event, person in events_to_process:
-        if is_valid_event(event):
-            valid_events_to_process.append((event, person))
-        else:
-            print(f"Skipping invalid event during processing (missing type or practice_date): {event}")
-    
-    if not valid_events_to_process:
-        return
-    
     # Group events by person
     events_by_person = defaultdict(list)
-    for event, person in valid_events_to_process:
+    for event, person in events_to_process:
         events_by_person[person].append(event)
     
     # Process events for each person (filter by cell, merge bg/newValue, etc.)
@@ -378,20 +365,13 @@ def handle_event():
         print(f"Quiet period active - skipping notifications. Current EST time: {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         return "Success (quiet period - notifications disabled)", 204
     
-    # Add new events to the pending queue with current timestamp (only valid events)
+    # Add new events to the pending queue with current timestamp
     now = datetime.now(EST)
-    valid_count = 0
-    invalid_count = 0
     with pending_events_lock:
         for event in data:
-            if is_valid_event(event):
-                person = event.get('person', 'Unknown')
-                pending_events.append((event, now, person))
-                valid_count += 1
-            else:
-                invalid_count += 1
-                print(f"Skipping invalid event (missing type or practice_date): {event}")
-        print(f"Added {valid_count} valid event(s) to pending queue. Skipped {invalid_count} invalid event(s). Total pending: {len(pending_events)}")
+            person = event.get('person', 'Unknown')
+            pending_events.append((event, now, person))
+        print(f"Added {len(data)} event(s) to pending queue. Total pending: {len(pending_events)}")
     
     # Process and send any events that are ready (older than BATCH_WINDOW_SECONDS)
     process_and_send_batched_events()
