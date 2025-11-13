@@ -114,8 +114,8 @@ def format_discord_message(person, events):
             if 'T' in date_changed:
                 parts = date_changed.split('T')
                 if len(parts) == 2:
-                    # Assume current year and parse
-                    year = datetime.now().year
+                    # Assume current year and parse (use EST timezone)
+                    year = datetime.now(EST).year
                     month_day = parts[0]
                     time_part = parts[1].replace('Z', '')
                     try:
@@ -151,13 +151,31 @@ def format_discord_message(person, events):
         "description": description,
         "color": color,
         "fields": fields,
-        "timestamp": timestamp or datetime.now(EST).isoformat(),
+        "timestamp": datetime.now(EST).isoformat() or timestamp,
         "footer": {
-            "text": "Attendance System"
+            "text": f"Attendance System"
         }
-    }
+    }   
     
     return {"embeds": [embed]}
+
+def is_quiet_period():
+    """Check if current time is in quiet period: Saturday 12:00am to Sunday 7:30pm EST."""
+    now_est = datetime.now(EST)
+    weekday = now_est.weekday()  # 0=Monday, 5=Saturday, 6=Sunday
+    hour = now_est.hour
+    minute = now_est.minute
+    
+    # Saturday (5) from 00:00 onwards
+    if weekday == 5:
+        return True
+    
+    # Sunday (6) until 19:30 (7:30pm)
+    if weekday == 6:
+        if hour < 19 or (hour == 19 and minute < 30):
+            return True
+    
+    return False
 
 def send_msg(payload):
     """Send message to Discord webhook. Payload can be embed format or plain content."""
@@ -176,6 +194,12 @@ def handle_event():
     
     if not data:
         return "No data provided", 400
+    
+    # Check if we're in quiet period (Saturday 12:00am to Sunday 7:30pm EST)
+    if is_quiet_period():
+        now_est = datetime.now(EST)
+        print(f"Quiet period active - skipping notifications. Current EST time: {now_est.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        return "Success (quiet period - notifications disabled)", 204
     
     # Group events by person
     events_by_person = defaultdict(list)
