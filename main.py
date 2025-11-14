@@ -15,8 +15,16 @@ load_dotenv(find_dotenv())
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
+BATCH_WINDOW_SECONDS = 20
+
 # Batching configuration - messages within this time window (in seconds) will be batched together
-BATCH_WINDOW_SECONDS = int(os.getenv("DEV_BATCH_WINDOW_SECONDS")) if os.getenv("ENV") == "development" else 20
+# Check for production batch window, then dev, then fallback to 20
+if os.getenv("ENV") == "development":
+    BATCH_WINDOW_SECONDS = int(os.getenv("DEV_BATCH_WINDOW_SECONDS", "20"))
+elif os.getenv("BATCH_WINDOW_SECONDS"):
+    BATCH_WINDOW_SECONDS = int(os.getenv("BATCH_WINDOW_SECONDS"))
+else:
+    BATCH_WINDOW_SECONDS = 20
 
 # Rows to skip - comma-separated list of row numbers (e.g., "1,2,3")
 SKIP_ROWS_STR = os.getenv("SKIP_ROWS", "1,2,3")
