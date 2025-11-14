@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import pytz
 import threading
+import re
 
 # Load environment variables from .env file
 EST = pytz.timezone("America/Toronto")
@@ -15,7 +16,11 @@ load_dotenv(find_dotenv())
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 # Batching configuration - messages within this time window (in seconds) will be batched together
-BATCH_WINDOW_SECONDS = int(os.getenv("DEV_BATCH_WINDOW_SECONDS")) if os.getenv("ENV") == "development" else 20 
+BATCH_WINDOW_SECONDS = int(os.getenv("DEV_BATCH_WINDOW_SECONDS")) if os.getenv("ENV") == "development" else 20
+
+# Rows to skip - comma-separated list of row numbers (e.g., "1,2,3")
+SKIP_ROWS_STR = os.getenv("SKIP_ROWS", "1,2,3")
+SKIP_ROWS = [int(row.strip()) for row in SKIP_ROWS_STR.split(",") if row.strip().isdigit()] 
 
 app = Flask(__name__)
 
@@ -90,6 +95,20 @@ def parse_date_changed(date_changed_str):
         pass
     return None
 
+def extract_row_number(cell):
+    """Extract row number from cell reference (e.g., 'AG11' -> 11, 'A1' -> 1)."""
+    if not cell or cell == 'N/A':
+        return None
+    # Find the first digit in the cell string (row number starts after column letters)
+    match = re.search(r'\d+', cell)
+    if match:
+        return int(match.group())
+    return None
+
+def is_valid_person(person):
+    """Check if person is valid (not missing, blank, or empty string)."""
+    return person and person.strip() != ""
+
 def format_date(date_str):
     """Format ISO date string to readable format in EST timezone."""
     try:
@@ -125,7 +144,7 @@ def format_discord_message(person, events):
                 if dt.tzinfo is None:
                     dt = pytz.UTC.localize(dt)
                 dt_est = dt.astimezone(EST)
-                practice_date = dt_est.strftime('%a %b %-d')
+                practice_date = dt_est.strftime('%a, %b %-d')
             else:
                 practice_date = "N/A"
         except Exception:
@@ -140,16 +159,14 @@ def format_discord_message(person, events):
         status_emoji = "✅" if attendance_status == "Present" else "❌"
         
         field_value = f"**Status:** {status_emoji} {attendance_status}\n"
-        field_value += f"**Date:** {practice_date}\n"
-        field_value += f"**Type:** {event_type}\n"
-        # field_value += f"**Change:** {change_type}\n"
+        field_value += f"**{event_type}**\n"
         field_value += f"**Cell:** {cell}"
         
         if event.get('newValue'):
             field_value += f"\n**Message:** {event.get('newValue')}"
         
         fields.append({
-            "name": f"Event {len(fields) + 1}",
+            "name": f"{practice_date}",
             "value": field_value,
             "inline": False
         })
@@ -258,9 +275,11 @@ def process_and_send_batched_events():
     if not events_to_process:
         return
     
-    # Group events by person
+    # Group events by person (filter out events with invalid person)
     events_by_person = defaultdict(list)
     for event, person in events_to_process:
+        if not is_valid_person(person):
+            continue
         events_by_person[person].append(event)
     
     # Process events for each person (filter by cell, merge bg/newValue, etc.)
@@ -270,6 +289,10 @@ def process_and_send_batched_events():
         events_by_cell = defaultdict(list)
         for event in events:
             cell = event.get('cell', 'N/A')
+            # Skip events in configured rows
+            row_number = extract_row_number(cell)
+            if row_number is not None and row_number in SKIP_ROWS:
+                continue
             events_by_cell[cell].append(event)
         
         # For each cell, track latest bg change and latest newValue change separately
@@ -368,10 +391,15 @@ def handle_event():
     # Add new events to the pending queue with current timestamp
     now = datetime.now(EST)
     with pending_events_lock:
+        skipped_count = 0
         for event in data:
-            person = event.get('person', 'Unknown')
+            person = event.get('person')  # Get actual value, don't default to 'Unknown'
+            # Skip events with invalid person (missing, blank, or empty string)
+            if not is_valid_person(person):
+                skipped_count += 1
+                continue
             pending_events.append((event, now, person))
-        print(f"Added {len(data)} event(s) to pending queue. Total pending: {len(pending_events)}")
+        print(f"Added {len(data) - skipped_count} event(s) to pending queue (skipped {skipped_count} with invalid person). Total pending: {len(pending_events)}")
     
     # Process and send any events that are ready (older than BATCH_WINDOW_SECONDS)
     process_and_send_batched_events()
